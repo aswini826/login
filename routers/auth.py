@@ -1,5 +1,5 @@
 from datetime import timedelta, datetime, date
-from typing_extensions import Annotated
+from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, constr, Field
 from sqlalchemy.orm import Session
@@ -27,7 +27,7 @@ class CreateUserRequest(BaseModel):
     username: str
     password: str
     register_number: int
-    phone: constr(regex=r'\+\d{10}')
+    phone: str
     date_of_birth: date
     course: str
 
