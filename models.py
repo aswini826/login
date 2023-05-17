@@ -10,7 +10,7 @@ class Users(Base):
     username = Column(String, unique=True)
     hashed_password = Column(String)
     register_number = Column(Integer, unique=True)
-    phone = Column(Integer)
+    phone = Column(String)
     date_of_birth = Column(String)
     course = Column(String)
 
