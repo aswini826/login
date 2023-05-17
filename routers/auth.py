@@ -1,5 +1,5 @@
 from datetime import timedelta, datetime, date
-from typing import Annotated
+from typing_extensions import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, constr, Field
 from sqlalchemy.orm import Session
