@@ -164,3 +164,9 @@ async def reset_password(password_update: PasswordUpdate,
     db.commit()
 
     return {"message": "Password updated successfully"}
+
+
+@router.get("/users", status_code=status.HTTP_200_OK)
+async def get_users(db: Session = Depends(get_db)):
+    users = db.query(Users).all()
+    return users
