@@ -188,12 +188,3 @@ def delete_user(user_id: int, db: db_dependency):
     return {'message': 'User deleted Successfully'}
 
 
-users = session.query(Users).all()
-user_list = [{"id": user.id, "Email": user.email, "Username": user.username, "Password": user.hashed_password, "Register Number": user.register_number, "Phone" : user.phone, "D.O.B": user.date_of_birth, "Course": user.course} for user in users]
-
-
-@router.get("/users_list/")
-def get_user(page: int, per_page: int):
-    start_index = (page - 1) * per_page
-    end_index = start_index + per_page
-    return user_list[start_index:end_index]
