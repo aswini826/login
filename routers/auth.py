@@ -9,6 +9,7 @@ from models import Users
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from jose import jwt, JWTError
+from cryptography.fernet import Fernet
 
 router = APIRouter(
     prefix='/login',
@@ -20,9 +21,22 @@ session = SessionLocal()
 SECRET_KEY = 'nothingnothinggosaveusnow'
 ALGORITHM = 'HS256'
 
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+REFRESH_TOKEN_EXPIRE_DAYS = 7
+
+refresh_tokens = {}
 
 bcrypt_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 oauth2_bearer = OAuth2PasswordBearer(tokenUrl='auth/token')
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
+
+revoked_tokens = set()
+
+active_tokens = {}
+
+secret_key = Fernet.generate_key()
+cipher_suite = Fernet(secret_key)
 
 
 class CreateUserRequest(BaseModel):
@@ -48,9 +62,8 @@ class Login(BaseModel):
 
 
 class Token(BaseModel):
+    refresh_token: str
     access_token: str
-    token_type: str
-    message: str
 
 
 class PasswordUpdate(BaseModel):
@@ -94,11 +107,12 @@ def authenticate_user(username_or_email: str, password: str, db):
     return user
 
 
-def create_access_token(username: str, user_id: int, expires_delta: timedelta):
-    encode = {'sub': username, 'id': user_id}
-    expires = datetime.utcnow() + expires_delta
-    encode.update({'exp': expires})
-    return jwt.encode(encode, SECRET_KEY, algorithm=ALGORITHM)
+def create_access_token(data: dict, expires_delta: timedelta):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + expires_delta
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm="HS256")
+    return encoded_jwt
 
 
 def get_current_user(token: Annotated[str, Depends(oauth2_bearer)]):
@@ -150,11 +164,12 @@ def login_for_access_token(login_request: Login,
                            db: db_dependency):
     user = authenticate_user(login_request.username_or_email, login_request.password, db)
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail='Could not validate user.', headers={"WWW-Authenticate": "Bearer"})
-
-    token = create_access_token(user.username, user.id, timedelta(minutes=20))
-    return {'access_token': token, 'token_type': 'bearer', 'message': 'Login Successfully'}
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token({"sub": user.username}, access_token_expires)
+    refresh_token_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    refresh_token = create_access_token({"sub": user.username}, refresh_token_expires)
+    return {"access_token": access_token, "refresh_token": refresh_token}
 
 
 @router.put("/update_password")
@@ -178,7 +193,7 @@ async def update_user_password(update_password: PasswordUpdate,
 @router.get("/users", status_code=status.HTTP_200_OK)
 async def get_users(db: db_dependency):
     return db.query(Users).all()
-
+         
 
 @router.delete('/delete_user/{user_id}')
 def delete_user(user_id: int, db: db_dependency):
@@ -188,3 +203,37 @@ def delete_user(user_id: int, db: db_dependency):
     return {'message': 'User deleted Successfully'}
 
 
+@router.post("/encrypt")
+def encrypt(data: str):
+    # Convert the data to bytes
+    data_bytes = data.encode()
+
+    # Encrypt the data using the cipher suite
+    encrypted_data = cipher_suite.encrypt(data_bytes)
+
+    # Return the encrypted data
+    return {"encrypted_data": encrypted_data}
+
+
+@router.post("/decrypt")
+def decrypt(encrypted_data: str):
+    # Decrypt the encrypted data using the cipher suite
+    decrypted_data = cipher_suite.decrypt(encrypted_data.encode())
+
+    # Convert the decrypted data to a string
+    decrypted_data_str = decrypted_data.decode()
+
+    # Return the decrypted data
+    return {"decrypted_data": decrypted_data_str}
+
+
+@router.post("/logout/all")
+def logout_all_devices(token: str):
+    # Extract the user ID from the access token
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    user_id = payload.get("sub")
+
+    # Revoke all access tokens associated with the user ID
+    revoked_tokens.add(user_id)
+
+    return {"message": "Logged out from all devices successfully."}
